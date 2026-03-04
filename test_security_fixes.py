@@ -12,7 +12,9 @@ Tests to verify:
 import sys
 import os
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
+import tempfile
 
 # Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -352,6 +354,55 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(k, 10)
 
 
+class TestProductionHardeningFixes(unittest.TestCase):
+    """Regression tests for production hardening changes."""
+    
+    def test_setup_maintenance_quotes_workspace_in_cron(self):
+        """Cron entry should safely quote workspace/script paths."""
+        from install import setup_maintenance
+        
+        with tempfile.TemporaryDirectory(prefix="amem test;unsafe ") as temp_dir:
+            workspace = Path(temp_dir)
+            mock_result = MagicMock(stdout="")
+            
+            with patch("install.subprocess.run", return_value=mock_result) as mock_run:
+                setup_maintenance(workspace)
+            
+            self.assertGreaterEqual(mock_run.call_count, 2)
+            cron_install_call = mock_run.call_args_list[1]
+            cron_text = cron_install_call.kwargs.get("input", "")
+            self.assertIn("cd '", cron_text)
+            self.assertIn("memory_maintenance.py'", cron_text)
+    
+    def test_encryption_key_file_permissions_are_restricted(self):
+        """Stored key file should be owner-readable only."""
+        from encryption import HAS_CRYPTO, setup_encryption
+        
+        if not HAS_CRYPTO:
+            self.skipTest("cryptography not available")
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            setup_encryption(workspace, password="test-password")
+            key_file = workspace / ".memory_key"
+            
+            self.assertTrue(key_file.exists())
+            mode = key_file.stat().st_mode & 0o777
+            self.assertEqual(mode, 0o600)
+    
+    def test_authentication_is_not_insecure_by_default(self):
+        """Memory API should not allow unauthenticated default mode implicitly."""
+        source = (Path(__file__).parent / "services" / "memory-api" / "main.py").read_text()
+        self.assertIn("ALLOW_INSECURE_AUTH", source)
+        self.assertIn("raise HTTPException(401, \"API authentication required: configure AMEM_API_KEYS\")", source)
+    
+    def test_context_endpoint_handles_bad_max_tokens(self):
+        """Context handler should guard int parsing for max_tokens."""
+        source = (Path(__file__).parent / "amem_server.py").read_text()
+        self.assertIn("except (ValueError, TypeError):", source)
+        self.assertIn("max_tokens = 1500", source)
+
+
 def run_tests():
     """Run all security tests"""
     print("=" * 60)
@@ -368,6 +419,7 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestSafeErrorHandling))
     suite.addTests(loader.loadTestsFromTestCase(TestAgentIDValidation))
     suite.addTests(loader.loadTestsFromTestCase(TestIntegration))
+    suite.addTests(loader.loadTestsFromTestCase(TestProductionHardeningFixes))
     
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)

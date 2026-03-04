@@ -29,6 +29,7 @@ class MemoryEncryption:
     def __init__(self, key: Optional[bytes] = None, password: Optional[str] = None):
         self._fernet = None
         self._enabled = False
+        self._key = None
         
         if not HAS_CRYPTO:
             print("[Encryption] cryptography not installed, encryption disabled")
@@ -37,6 +38,7 @@ class MemoryEncryption:
         
         if key:
             self._fernet = Fernet(key)
+            self._key = key
             self._enabled = True
         elif password:
             self._derive_key(password)
@@ -55,6 +57,7 @@ class MemoryEncryption:
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
         self._fernet = Fernet(key)
+        self._key = key
         return salt
     
     def encrypt(self, data: str) -> str:
@@ -131,8 +134,8 @@ def setup_encryption(workspace: Path, password: Optional[str] = None) -> MemoryE
         encryption = MemoryEncryption(password=password)
         # Save key for future use
         if encryption.is_enabled():
-            # Note: In production, you'd want to protect this key better
-            key_file.write_bytes(encryption._fernet._encryption_key)
+            key_file.write_bytes(encryption._key)
+            key_file.chmod(0o600)
         return encryption
     
     # No encryption
