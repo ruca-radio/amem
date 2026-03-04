@@ -31,6 +31,9 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('amem')
 
+MIN_CONTEXT_TOKENS = 1
+MAX_CONTEXT_TOKENS = 8000
+
 # Import AMEM
 NATIVE_DIR = Path(__file__).parent / "native"
 if str(NATIVE_DIR) not in sys.path:
@@ -510,7 +513,10 @@ class AMEMAPIHandler(BaseHTTPRequestHandler):
             elif path == '/api/context':
                 query = InputValidator.validate_query(data.get('query', ''))
                 try:
-                    max_tokens = max(1, min(int(data.get('max_tokens', 1500)), 8000))
+                    max_tokens = max(
+                        MIN_CONTEXT_TOKENS,
+                        min(int(data.get('max_tokens', 1500)), MAX_CONTEXT_TOKENS)
+                    )
                 except (ValueError, TypeError):
                     max_tokens = 1500
                 
