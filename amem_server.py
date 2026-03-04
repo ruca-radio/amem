@@ -509,7 +509,10 @@ class AMEMAPIHandler(BaseHTTPRequestHandler):
             
             elif path == '/api/context':
                 query = InputValidator.validate_query(data.get('query', ''))
-                max_tokens = min(int(data.get('max_tokens', 1500)), 8000)
+                try:
+                    max_tokens = max(1, min(int(data.get('max_tokens', 1500)), 8000))
+                except (ValueError, TypeError):
+                    max_tokens = 1500
                 
                 ctx = agent.get_full_context(
                     query=query,

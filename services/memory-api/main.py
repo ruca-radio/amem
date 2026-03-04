@@ -31,6 +31,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://memory:memory@postgres:54
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 EMBEDDING_URL = os.getenv("EMBEDDING_URL", "http://embedding:8001/embed")
 API_KEYS = os.getenv("AMEM_API_KEYS", "")  # Format: "agent1:key1,agent2:key2"
+ALLOW_INSECURE_AUTH = os.getenv("AMEM_ALLOW_INSECURE_AUTH", "").lower() == "true"
 
 # Parse API keys
 _api_key_map = {}
@@ -92,9 +93,11 @@ async def authenticate(credentials: HTTPAuthorizationCredentials = Security(secu
     """Authenticate request using API key"""
     token = credentials.credentials
     
-    # Development mode - no keys configured
+    # Development mode - explicitly enabled only
     if not _api_key_map:
-        return "default"
+        if ALLOW_INSECURE_AUTH:
+            return "default"
+        raise HTTPException(401, "API authentication required: configure AMEM_API_KEYS")
     
     # Find agent by API key
     for agent_id, key in _api_key_map.items():

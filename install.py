@@ -15,6 +15,7 @@ This script:
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -231,7 +232,12 @@ print("[Memory Maintenance] Complete")
     
     # Try to set up cron job
     try:
-        cron_entry = f"0 2 * * * cd {workspace} && python3 {maintenance_script} >> {workspace}/memory_maintenance.log 2>&1"
+        escaped_workspace = shlex.quote(str(workspace))
+        escaped_script = shlex.quote(str(maintenance_script))
+        cron_entry = (
+            f"0 2 * * * cd {escaped_workspace} && python3 {escaped_script} >> "
+            f"{escaped_workspace}/memory_maintenance.log 2>&1"
+        )
         
         # Check if already installed
         result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
