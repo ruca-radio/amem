@@ -1,0 +1,41 @@
+{
+  "name": "@ruca/amem-bridge",
+  "version": "1.0.0",
+  "description": "AMEM Python memory system bridge for OpenClaw",
+  "openclaw": {
+    "extensions": ["./index.ts"],
+    "kind": "memory"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "agentId": {
+        "type": "string",
+        "default": "default"
+      },
+      "embeddingProvider": {
+        "type": "string",
+        "enum": ["auto", "huggingface", "ollama", "openai"],
+        "default": "auto"
+      },
+      "autoExtract": {
+        "type": "boolean",
+        "default": true
+      },
+      "graphMemory": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@openclaw/plugin-sdk/core": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

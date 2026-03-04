@@ -1,0 +1,111 @@
+version: "3.8"
+
+# External Ollama Configuration
+# Set OLLAMA_HOST to your LAN Ollama instance:
+# export OLLAMA_HOST=http://10.27.27.10:11434
+# docker-compose up -d
+
+services:
+  # Core memory services
+  memory-api:
+    build: ./services/memory-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://memory:memory@postgres:5432/memory
+      - REDIS_URL=redis://redis:6379/0
+      - EMBEDDING_SERVICE_URL=http://embedding:8001
+      - DEFAULT_MODEL_PROVIDER=ollama
+    depends_on:
+      - postgres
+      - redis
+      - embedding
+    volumes:
+      - ./services/memory-api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  embedding:
+    build: ./services/embedding
+    ports:
+      - "8001:8001"
+    environment:
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - FALLBACK_PROVIDER=openrouter
+    volumes:
+      - ./services/embedding:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+  # Agent gateway - routes between models, manages memory injection
+  agent-gateway:
+    build: ./services/agent-gateway
+    ports:
+      - "8002:8002"
+    environment:
+      - MEMORY_API_URL=http://memory-api:8000
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OPENROUTER_KEY=${OPENROUTER_KEY:-}
+      - ANTHROPIC_KEY=${ANTHROPIC_KEY:-}
+      - OPENAI_KEY=${OPENAI_KEY:-}
+    depends_on:
+      - memory-api
+    volumes:
+      - ./services/agent-gateway:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+  # Background processors
+  memory-compactor:
+    build: ./services/memory-compactor
+    environment:
+      - DATABASE_URL=postgresql://memory:memory@postgres:5432/memory
+      - MEMORY_API_URL=http://memory-api:8000
+      - EMBEDDING_SERVICE_URL=http://embedding:8001
+    depends_on:
+      - postgres
+      - memory-api
+    volumes:
+      - ./services/memory-compactor:/app
+    command: python -m compactor daemon
+
+  # Infrastructure
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=memory
+      - POSTGRES_PASSWORD=memory
+      - POSTGRES_DB=memory
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  # Optional: local Ollama for embeddings + small models
+  # Comment out if using external Ollama
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles:
+      - local-ollama
+    # GPU optional - falls back to CPU
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:

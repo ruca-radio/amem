@@ -1,0 +1,26 @@
+{
+  "name": "openclaw-memory",
+  "version": "1.0.0",
+  "description": "Production-grade memory system for OpenClaw agents",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruca-radio/amem.git"
+  },
+  "scripts": {
+    "install": "python3 install.py",
+    "test": "python3 -m pytest tests/",
+    "maintenance": "python3 memory_maintenance.py"
+  },
+  "keywords": [
+    "openclaw",
+    "memory",
+    "ai",
+    "agents",
+    "vector-search"
+  ],
+  "author": "Kimi-Claw",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

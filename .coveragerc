@@ -1,0 +1,9 @@
+[run]
+source = 
+    /root/.openclaw/workspace/memory_system
+
+[report]
+include = 
+    */memory_system/openclaw_memory.py
+    */memory_system/embeddings.py
+    */memory_system/amem_web.py

@@ -1,0 +1,35 @@
+{
+  "name": "openclaw-memory",
+  "version": "1.0.0",
+  "description": "Memory system plugin for OpenClaw agents",
+  "main": "index.js",
+  "hooks": {
+    "agent:init": "onAgentInit",
+    "agent:prompt": "onPrompt",
+    "agent:response": "onResponse",
+    "tools:register": "registerTools"
+  },
+  "config": {
+    "agentId": {
+      "type": "string",
+      "default": "default",
+      "description": "Agent ID for memory isolation"
+    },
+    "embeddingProvider": {
+      "type": "string",
+      "enum": ["auto", "huggingface", "ollama", "openai"],
+      "default": "auto",
+      "description": "Embedding provider preference"
+    },
+    "autoExtract": {
+      "type": "boolean",
+      "default": true,
+      "description": "Auto-extract facts from conversations"
+    },
+    "graphMemory": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable entity-relationship graph"
+    }
+  }
+}

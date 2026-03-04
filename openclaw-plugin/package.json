@@ -1,0 +1,52 @@
+{
+  "name": "@ruca/amem",
+  "version": "1.0.0",
+  "description": "AMEM - Agent Memory System for OpenClaw",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "kind": "memory"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "agentId": {
+        "type": "string",
+        "default": "default",
+        "description": "Agent ID for memory isolation"
+      },
+      "embeddingProvider": {
+        "type": "string",
+        "enum": ["auto", "huggingface", "ollama", "openai"],
+        "default": "auto",
+        "description": "Embedding provider preference"
+      },
+      "autoExtract": {
+        "type": "boolean",
+        "default": true,
+        "description": "Auto-extract facts from conversations"
+      },
+      "graphMemory": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable entity-relationship graph"
+      }
+    }
+  },
+  "keywords": ["openclaw", "plugin", "memory", "amem"],
+  "author": "Ruca Radio",
+  "license": "MIT",
+  "peerDependencies": {
+    "openclaw": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

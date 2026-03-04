@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""
+AMEM CLI - Command line interface for Agent Memory System
+Usage: ./memory [command] [options]
+"""
+import argparse
+import json
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+from datetime import datetime
+
+# Add native to path
+NATIVE_DIR = Path(__file__).parent / "native"
+if str(NATIVE_DIR) not in sys.path:
+    sys.path.insert(0, str(NATIVE_DIR))
+
+from openclaw_memory import MemoryTools
+from auto_extract import AutoMemoryExtractor
+from graph_memory import MemoryGraphTools
+
+
+def cmd_remember(args):
+    """Store a memory"""
+    memory = MemoryTools(args.agent)
+    result = memory.remember(
+        content=args.content,
+        memory_type=args.type,
+        importance=args.importance,
+        permanent=args.permanent
+    )
+    print(result)
+
+
+def cmd_recall(args):
+    """Search memories"""
+    memory = MemoryTools(args.agent)
+    results = memory.recall(args.query, k=args.limit)
+    
+    if args.json:
+        print(json.dumps(results, indent=2))
+    else:
+        for i, result in enumerate(results, 1):
+            print(f"{i}. {result}")
+
+
+def cmd_list(args):
+    """List all memories"""
+    memory = MemoryTools(args.agent)
+    stats = memory.store.stats()
+    
+    print(f"Agent: {args.agent}")
+    print(f"Total memories: {stats.get('total', 0)}")
+    print(f"Tiers: {stats.get('tiers', {})}")
+
+
+def cmd_stats(args):
+    """Show memory statistics"""
+    memory = MemoryTools(args.agent)
+    stats = memory.store.stats()
+    print(json.dumps(stats, indent=2))
+
+
+def cmd_export(args):
+    """Export memories to JSON"""
+    memory = MemoryTools(args.agent)
+    
+    # Get all memories via search
+    all_memories = []
+    for tier in ["semantic", "episodic"]:
+        from openclaw_memory import MemoryTier
+        tier_enum = getattr(MemoryTier, tier.upper())
+        results = memory.store.query("*", tiers=[tier_enum], k=1000)
+        for mem, score in results:
+            all_memories.append({
+                "content": mem.content,
+                "type": mem.memory_type.value if hasattr(mem, 'memory_type') else "unknown",
+                "tier": tier,
+                "importance": mem.importance,
+                "created": mem.created_at.isoformat() if hasattr(mem, 'created_at') else None
+            })
+    
+    export_data = {
+        "agent_id": args.agent,
+        "exported_at": datetime.now().isoformat(),
+        "memories": all_memories
+    }
+    
+    if args.output:
+        with open(args.output, 'w') as f:
+            json.dump(export_data, f, indent=2)
+        print(f"Exported {len(all_memories)} memories to {args.output}")
+    else:
+        print(json.dumps(export_data, indent=2))
+
+
+def cmd_import(args):
+    """Import memories from JSON"""
+    with open(args.file) as f:
+        data = json.load(f)
+    
+    memory = MemoryTools(args.agent)
+    
+    imported = 0
+    for mem in data.get("memories", []):
+        memory.remember(
+            content=mem["content"],
+            memory_type=mem.get("type", "fact"),
+            importance=mem.get("importance", 0.5),
+            permanent=(mem.get("tier") == "semantic")
+        )
+        imported += 1
+    
+    print(f"Imported {imported} memories")
+
+
+def cmd_extract(args):
+    """Extract facts from text"""
+    extractor = AutoMemoryExtractor(args.agent)
+    
+    # Read from file or stdin
+    if args.file:
+        text = open(args.file).read()
+    else:
+        text = sys.stdin.read()
+    
+    facts = extractor.extractor.extract(text)
+    
+    print(f"Extracted {len(facts)} facts:")
+    for fact in facts:
+        print(f"  [{fact.fact_type}] {fact.content} (conf: {fact.confidence:.2f})")
+
+
+def cmd_ask(args):
+    """Ask a question using graph memory"""
+    graph = MemoryGraphTools(args.agent)
+    answer = graph.ask(args.question)
+    print(answer)
+
+
+def cmd_web(args):
+    """Start web UI"""
+    try:
+        from amem_web import run_server
+        run_server(args.agent, args.port)
+    except ImportError:
+        from web_ui import run_server
+        run_server(args.agent, args.port)
+
+
+def cmd_update(args):
+    """Self-update memory system"""
+    update_script = Path(__file__).parent / "update.py"
+    
+    if not update_script.exists():
+        # Download update script first
+        print("Downloading update script...")
+        url = "https://raw.githubusercontent.com/ruca-radio/amem/main/update.py"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            update_script.write_bytes(resp.read())
+        update_script.chmod(0o755)
+    
+    # Run update script
+    cmd = [sys.executable, str(update_script)]
+    if args.check:
+        cmd.append("--check")
+    if args.force:
+        cmd.append("--force")
+    
+    subprocess.run(cmd)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="AMEM - Agent Memory System CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  ./memory remember "User prefers Python" --permanent
+  ./memory recall "programming preferences"
+  ./memory list
+  ./memory export --output backup.json
+  ./memory ask "What technologies does user know?"
+  ./memory web --port 8080
+  ./memory update --check
+        """
+    )
+    
+    parser.add_argument("--agent", default="default", help="Agent ID")
+    
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+    
+    # remember
+    remember_parser = subparsers.add_parser("remember", help="Store a memory")
+    remember_parser.add_argument("content", help="Memory content")
+    remember_parser.add_argument("--type", default="fact", 
+                                  choices=["fact", "preference", "episode", "skill"],
+                                  help="Memory type")
+    remember_parser.add_argument("--importance", type=float, default=0.5,
+                                  help="Importance score (0-1)")
+    remember_parser.add_argument("--permanent", action="store_true",
+                                  help="Store in long-term memory")
+    remember_parser.set_defaults(func=cmd_remember)
+    
+    # recall
+    recall_parser = subparsers.add_parser("recall", help="Search memories")
+    recall_parser.add_argument("query", help="Search query")
+    recall_parser.add_argument("--limit", type=int, default=10, help="Max results")
+    recall_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    recall_parser.set_defaults(func=cmd_recall)
+    
+    # list
+    list_parser = subparsers.add_parser("list", help="List memories")
+    list_parser.set_defaults(func=cmd_list)
+    
+    # stats
+    stats_parser = subparsers.add_parser("stats", help="Show statistics")
+    stats_parser.set_defaults(func=cmd_stats)
+    
+    # export
+    export_parser = subparsers.add_parser("export", help="Export memories")
+    export_parser.add_argument("--output", "-o", help="Output file")
+    export_parser.set_defaults(func=cmd_export)
+    
+    # import
+    import_parser = subparsers.add_parser("import", help="Import memories")
+    import_parser.add_argument("file", help="JSON file to import")
+    import_parser.set_defaults(func=cmd_import)
+    
+    # extract
+    extract_parser = subparsers.add_parser("extract", help="Extract facts from text")
+    extract_parser.add_argument("--file", "-f", help="Input file (default: stdin)")
+    extract_parser.set_defaults(func=cmd_extract)
+    
+    # ask
+    ask_parser = subparsers.add_parser("ask", help="Ask a question")
+    ask_parser.add_argument("question", help="Question to ask")
+    ask_parser.set_defaults(func=cmd_ask)
+    
+    # web
+    web_parser = subparsers.add_parser("web", help="Start web UI")
+    web_parser.add_argument("--port", type=int, default=8080, help="Port number")
+    web_parser.set_defaults(func=cmd_web)
+    
+    # update
+    update_parser = subparsers.add_parser("update", help="Self-update memory system")
+    update_parser.add_argument("--check", action="store_true", help="Check for updates only")
+    update_parser.add_argument("--force", action="store_true", help="Force update")
+    update_parser.set_defaults(func=cmd_update)
+    
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+    
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
